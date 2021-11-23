@@ -9,21 +9,45 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v1
-      - name: Generate Documentation
-        uses: karwa/swift-doc@linux-fixes
+      - uses: actions/checkout@v2
+      - name: Download Swift 5.5.1
+        run: wget -q https://download.swift.org/swift-5.5.1-release/ubuntu2004/swift-5.5.1-RELEASE/swift-5.5.1-RELEASE-ubuntu20.04.tar.gz
+      - name: Extract Swift 5.5.1
+        run: tar xzf swift-5.5.1-RELEASE-ubuntu20.04.tar.gz
+      - name: Add Swift toolchain to PATH
+        run: |
+          echo "$GITHUB_WORKSPACE/swift-5.5.1-RELEASE-ubuntu20.04/usr/bin" >> $GITHUB_PATH
+
+      - name: Clone swift-docc
+        uses: actions/checkout@v2
         with:
-          inputs: "Sources/WebURL"
-          module-name: WebURL
-          output: "Documentation"
-          base-url: "/swift-url/"
-          format: html
-          excluded-symbols: docs-excluded-symbols
+          repository: karwa/swift-docc
+          ref: main
+          path: swift-docc
+      - name: Clone swift-docc-render
+        uses: actions/checkout@v2
+        with:
+          repository: karwa/swift-docc-render
+          ref: main
+          path: swift-docc-render
+      - name: Build swift-docc
+        run: |
+          cd swift-docc; swift build --product docc -c release; cd ..
+      - name: Build swift-docc-render
+        run: |
+          cd swift-docc-render; npm install && npm run build; cd ..
+      
+      - name: Generate SymbolGraph
+        run: |
+          mkdir -p .build/symbol-graphs && swift build --target WebURL -Xswiftc -emit-symbol-graph -Xswiftc -emit-symbol-graph-dir -Xswiftc .build/symbol-graphs
+      - name: Run Docc
+        run: |
+          export DOCC_HTML_DIR="$(pwd)/swift-docc-render/dist" && swift-docc/.build/release/docc convert Sources/WebURL/WebURL.docc --fallback-display-name WebURL --fallback-bundle-identifier com.karwa.WebURL --fallback-bundle-version 0.2.0 --additional-symbol-graph-dir .build/symbol-graphs --transform-for-static-hosting --static-hosting-base-path /swift-url-docs-test --output-path WebURL.doccarchive 
       - name: Fix permissions
-        run: 'sudo chown --recursive $USER Documentation'
+        run: 'sudo chown --recursive $USER WebURL.doccarchive'
       - name: Publish documentation to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@4.1.1
         with:
           branch: gh-pages
-          folder: Documentation
+          folder: WebURL.doccarchive
           single-commit: true
