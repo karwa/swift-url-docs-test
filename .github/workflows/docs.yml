@@ -12,7 +12,7 @@ jobs:
       # 4. Checkout WebURL code (we need a full clone in order to get tags).
       #    This must be the root folder for 'github-pages-deploy-action' to work.
       - name: Checkout WebURL Code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v2.4.0
         with:
           fetch-depth: 0
       # 1. Download and Install Swift 5.5.1
@@ -65,11 +65,38 @@ jobs:
       - name: Run Docc (main)
         run: |
           export DOCC_HTML_DIR="$(pwd)/swift-docc-render/dist" && swift-docc/.build/release/docc convert Sources/WebURL/WebURL.docc --fallback-display-name WebURL --fallback-bundle-identifier com.karwa.WebURL --fallback-bundle-version 0.0.0 --additional-symbol-graph-dir .build/symbol-graphs --transform-for-static-hosting --static-hosting-base-path /swift-url-docs-test/main --output-path docs-out/main
+      # 7. Generate docs for the latest tag.
+      - name: Check zero
+        run: |
+          echo "$(git tag -l)"
+      - name: Check zero-point-five
+        run: |
+          echo "$(git tag -l | tail -1)"
+      - name: Get latest tag
+        run: |
+          echo "latest-tag=$( git tag -l | tail -1 )" >> $GITHUB_ENV
+      - name: Check if docs exist for latest tag
+        run: |
+          echo "latest-tag-has-docs=$([ -d /docs-out/${{ env.latest-tag }} ] && echo "true")" >> $GITHUB_ENV
+      - name: Checkout latest tag
+        if: ${{ !env.latest-tag-has-docs }}
+        run: |
+          git checkout ${{ env.latest-tag }}
+      - name: Generate SymbolGraph (latest tag)
+        if: ${{ !env.latest-tag-has-docs }}
+        run: |
+          mkdir -p .build/symbol-graphs-${{ env.latest-tag }} && swift build --target WebURL -Xswiftc -emit-symbol-graph -Xswiftc -emit-symbol-graph-dir -Xswiftc .build/symbol-graphs-${{ env.latest-tag }}
+      - name: Run Docc (latest tag)
+        if: ${{ !env.latest-tag-has-docs }}
+        run: |
+          export DOCC_HTML_DIR="$(pwd)/swift-docc-render/dist" && swift-docc/.build/release/docc convert Sources/WebURL/WebURL.docc --fallback-display-name WebURL --fallback-bundle-identifier com.karwa.WebURL --fallback-bundle-version ${{ env.latest-tag }} --additional-symbol-graph-dir .build/symbol-graphs-${{ env.latest-tag }} --transform-for-static-hosting --static-hosting-base-path /swift-url-docs-test/${{ env.latest-tag }} --output-path docs-out/${{ env.latest-tag }}
       # 7. Publish the result.
       - name: Check one
         run: ls -al docs-out
       - name: Check two
         run: ls -al docs-out/main/
+      - name: Check latest
+        run: ls -al docs-out/${{ env.latest-tag }}
       - name: Fix permissions
         run: 'sudo chown --recursive $USER docs-out'
       - name: Publish documentation to GitHub Pages
